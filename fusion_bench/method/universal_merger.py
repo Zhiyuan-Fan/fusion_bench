@@ -33,7 +33,7 @@ class UniversalMergerAlgorithm(SimpleProfilerMixin, BaseAlgorithm):
 
     def __init__(
         self,
-        alphas: Optional[Dict[str, float]] = None,
+        alpha: float = 0.5,
         importance_threshold: float = 0.3,
         ranking_strategy: Literal["global", "local"] = "global",
         seed: int = 42,
@@ -43,13 +43,13 @@ class UniversalMergerAlgorithm(SimpleProfilerMixin, BaseAlgorithm):
         初始化Universal Model Merger
 
         Args:
-            alphas: 各模型的权重系数，如果为None则使用均匀权重
+            alpha: 融合强度系数，适用于所有任务模型
             importance_threshold: 重要性阈值，用于决定冲突解决策略
             ranking_strategy: 排名策略，"global"或"local"
             seed: 随机种子
         """
         super().__init__(**kwargs)
-        self.alphas = alphas
+        self.alpha = alpha
         self.importance_threshold = importance_threshold
         self.ranking_strategy = ranking_strategy
         self.seed = seed
@@ -223,7 +223,7 @@ class UniversalMergerAlgorithm(SimpleProfilerMixin, BaseAlgorithm):
                 task_vecs[model_name] * rescale_factors[model_name],
                 torch.zeros_like(task_vecs[model_name])
             )
-            merged_delta = merged_delta + self.alphas[model_name] * rescaled_task_vec
+            merged_delta = merged_delta + self.alpha * rescaled_task_vec
 
         return (base_tensor + merged_delta).to(original_dtype)
 
@@ -251,14 +251,7 @@ class UniversalMergerAlgorithm(SimpleProfilerMixin, BaseAlgorithm):
         if self.n_models < 2:
             raise ValueError(f"Universal Merger requires at least 2 models, got {self.n_models}")
 
-        # 设置默认权重
-        if self.alphas is None:
-            self.alphas = {name: 1.0 / self.n_models for name in self.model_names}
-        else:
-            # 确保所有模型都有权重
-            for name in self.model_names:
-                if name not in self.alphas:
-                    self.alphas[name] = 1.0 / self.n_models
+        # alpha已经是单一参数，无需设置字典
 
         # 初始化统计信息
         self.global_stats['per_model_stats'] = {
@@ -269,7 +262,7 @@ class UniversalMergerAlgorithm(SimpleProfilerMixin, BaseAlgorithm):
         log.info(f"🚀 Universal Model Merger ({self.ranking_strategy.upper()} Ranking)")
         log.info(f"Models: {self.n_models} | Threshold: {self.importance_threshold}")
         log.info(f"Model names: {self.model_names}")
-        log.info(f"Alphas: {self.alphas}")
+        log.info(f"Alpha: {self.alpha}")
 
         # 加载基础模型
         with self.profile("load base model"):
