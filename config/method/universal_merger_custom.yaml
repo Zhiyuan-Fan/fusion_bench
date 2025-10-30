@@ -1,0 +1,26 @@
+# =============================================================================
+# FusionBench Method Configuration: Universal Model Merger (Custom Weights)
+# =============================================================================
+# Universal Model Merger算法，使用自定义权重配置的示例
+#
+# 这个配置展示了如何为不同的模型设置不同的融合权重
+# =============================================================================
+
+_target_: fusion_bench.method.universal_merger.UniversalMergerAlgorithm
+
+# 自定义模型权重 - 根据实际模型名称调整
+alphas:
+  sun397: 0.2
+  stanford-cars: 0.3
+  eurosat: 0.2
+  svhn: 0.15
+  gtsrb: 0.15
+
+# 重要性阈值
+importance_threshold: 0.25
+
+# 排名策略
+ranking_strategy: "global"
+
+# 随机种子
+seed: 42
