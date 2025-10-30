@@ -264,14 +264,10 @@ class UniversalMergerAlgorithm(SimpleProfilerMixin, BaseAlgorithm):
         log.info(f"Model names: {self.model_names}")
         log.info(f"Alpha: {self.alpha}")
 
-        # 加载基础模型
+        # 加载基础模型 - 严格要求_pretrained_模型（与Task Arithmetic一致）
         with self.profile("load base model"):
-            if '_pretrained_' in modelpool.model_names:
-                base_model = modelpool.load_model('_pretrained_')
-                log.info("Using '_pretrained_' as base model")
-            else:
-                base_model = modelpool.load_model(self.model_names[0])
-                log.info(f"Using '{self.model_names[0]}' as base model")
+            base_model = modelpool.load_model('_pretrained_')
+            log.info("Using '_pretrained_' as base model")
 
         # 加载专家模型
         specialist_models = {}
