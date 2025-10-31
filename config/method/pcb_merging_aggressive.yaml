@@ -1,0 +1,17 @@
+# =============================================================================
+# FusionBench Method Configuration: PCB Merging (Aggressive Parameters)
+# =============================================================================
+# More aggressive PCB merging with higher competition parameter dropping
+# =============================================================================
+
+_target_: fusion_bench.method.pcb_merging.PCBMergingAlgorithm
+
+# Higher scaling factor for stronger fusion
+scaling_factor: 0.5
+
+# Higher PCB ratio - drop more competitive parameters
+pcb_ratio: 0.2
+
+# Outlier clamping parameters
+min_ratio: 0.0001
+max_ratio: 0.0001

@@ -1,0 +1,24 @@
+# =============================================================================
+# FusionBench Method Configuration: PCB (Parameter Competition Balancing) Merging
+# =============================================================================
+# PCB Merging addresses parameter competition in model merging by:
+# 1. Computing intra-balancing (self-competition within tasks)
+# 2. Computing inter-balancing (cross-task competition)
+# 3. Using drop and rescale mechanism to balance parameter contributions
+#
+# Based on: "PCB-Merging: Parameter Competition Balancing for Model Merging"
+# GitHub: https://github.com/duguodong7/pcb-merging
+# =============================================================================
+
+_target_: fusion_bench.method.pcb_merging.PCBMergingAlgorithm
+
+# Final scaling factor for merged task vector (similar to other methods)
+scaling_factor: 0.3
+
+# Ratio of highest competition parameters to drop (adjustable hyperparameter)
+# Higher values drop more parameters, potentially reducing conflicts but also reducing information
+pcb_ratio: 0.1
+
+# Percentile bounds for outlier clamping (advanced parameters)
+min_ratio: 0.0001
+max_ratio: 0.0001
