@@ -23,7 +23,7 @@ from tqdm import tqdm
 from fusion_bench.method.base_algorithm import BaseAlgorithm
 from fusion_bench.mixins import SimpleProfilerMixin
 from fusion_bench.modelpool import BaseModelPool
-from fusion_bench.utils.state_dict_arithmetic import state_dict_to_vector, vector_to_state_dict
+# Note: state_dict_to_vector not needed - we implement our own flattening logic
 
 log = logging.getLogger(__name__)
 
