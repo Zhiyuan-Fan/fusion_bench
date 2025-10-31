@@ -1,0 +1,9 @@
+# @package _global_
+defaults:
+  - override /method: universal_merger_v2
+
+method:
+  _target_: fusion_bench.method.UniversalMergerV2Algorithm
+  alpha: 0.5
+  importance_threshold: 0.3
+  seed: 42
