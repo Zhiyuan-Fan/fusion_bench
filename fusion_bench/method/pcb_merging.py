@@ -31,37 +31,41 @@ __all__ = ["PCBMergingAlgorithm"]
 
 
 def normalize(tensor: torch.Tensor, dim: int) -> torch.Tensor:
-    """Normalize tensor along specified dimension"""
-    return torch.nn.functional.normalize(tensor, p=2, dim=dim)
+    """Min-max normalize tensor along specified dimension (matches original PCB implementation)"""
+    min_values, _ = torch.min(tensor, dim=dim, keepdim=True)
+    max_values, _ = torch.max(tensor, dim=dim, keepdim=True)
+    # Avoid division by zero
+    range_values = max_values - min_values
+    range_values = torch.clamp(range_values, min=1e-12)
+    normalized = (tensor - min_values) / range_values
+    return normalized
 
 
-def clamp_by_percentile(tensor: torch.Tensor, keep_ratio: float, min_val: float = 0.0) -> torch.Tensor:
+def clamp(tensor: torch.Tensor, min_ratio: float = 0.0, max_ratio: float = 0.0) -> torch.Tensor:
     """
-    Clamp tensor values by removing top (1-keep_ratio) portion based on magnitude
+    Clamp tensor values based on percentiles (matches original PCB implementation)
 
     Args:
         tensor: Input tensor
-        keep_ratio: Ratio of values to keep (e.g., 0.9 keeps bottom 90%)
-        min_val: Minimum value after clamping
+        min_ratio: Minimum percentile ratio
+        max_ratio: Maximum percentile ratio
 
     Returns:
         Clamped tensor
     """
-    if keep_ratio >= 1.0:
-        return tensor
+    if len(tensor.size()) == 1:
+        d = tensor.size(0)
+        sorted_x, _ = torch.sort(tensor)
+        min_val = sorted_x[int(d * min_ratio)]
+        max_val = sorted_x[int(d * (1 - max_ratio) - 1)]
+    else:
+        d = tensor.size(1)
+        sorted_x, _ = torch.sort(tensor, dim=1)
+        min_val = sorted_x[:, int(d * min_ratio)].unsqueeze(1)
+        max_val = sorted_x[:, int(d * (1 - max_ratio) - 1)].unsqueeze(1)
 
-    # Sort by absolute value and find threshold
-    sorted_abs, _ = torch.sort(torch.abs(tensor), dim=1, descending=True)
-    threshold_idx = int(tensor.shape[1] * (1 - keep_ratio))
-    threshold_idx = max(0, min(threshold_idx, tensor.shape[1] - 1))
-
-    thresholds = sorted_abs[:, threshold_idx:threshold_idx+1]
-
-    # Clamp values above threshold
-    mask = torch.abs(tensor) <= thresholds
-    clamped = torch.where(mask, tensor, torch.sign(tensor) * thresholds)
-
-    return torch.clamp(clamped, min=min_val)
+    clamped_x = torch.clamp(tensor, min_val, max_val)
+    return clamped_x
 
 
 class PCBMergingAlgorithm(SimpleProfilerMixin, BaseAlgorithm):
@@ -106,7 +110,7 @@ class PCBMergingAlgorithm(SimpleProfilerMixin, BaseAlgorithm):
 
     def pcb_merging(self, flat_task_checks: torch.Tensor) -> torch.Tensor:
         """
-        Core PCB merging function
+        Core PCB merging function - exactly matching original implementation
 
         Args:
             flat_task_checks: Tensor of shape [n_models, n_params] containing task vectors
@@ -114,29 +118,25 @@ class PCBMergingAlgorithm(SimpleProfilerMixin, BaseAlgorithm):
         Returns:
             Merged task vector of shape [n_params]
         """
-        n_models, n_params = flat_task_checks.shape
-        device = flat_task_checks.device
+        all_checks = flat_task_checks.clone()
+        n, d = all_checks.shape
+        device = all_checks.device
 
-        log.info(f"PCB merging {n_models} models with {n_params} parameters each")
+        log.info(f"PCB merging {n} models with {d} parameters each")
 
-        # Step 1: Outlier clamping using percentiles
+        # Step 1: Clamp outliers (exactly as original)
         with self.profile("outlier clamping"):
-            all_checks = clamp_by_percentile(flat_task_checks, 1 - self.max_ratio, self.min_ratio)
-            all_checks_abs = torch.abs(all_checks)
+            all_checks_abs = clamp(torch.abs(all_checks), min_ratio=self.min_ratio, max_ratio=self.max_ratio)
+            clamped_all_checks = torch.sign(all_checks) * all_checks_abs
 
         # Step 2: Intra-balancing (self-competition)
         with self.profile("intra-balancing"):
-            # Normalize each task vector and square for importance
             self_pcb = normalize(all_checks_abs, dim=1) ** 2
-            # Exponential amplification based on number of tasks
-            self_pcb_act = torch.exp(n_models * self_pcb)
+            self_pcb_act = torch.exp(n * self_pcb)
 
         # Step 3: Inter-balancing (cross-task competition)
         with self.profile("inter-balancing"):
-            # Interaction between tasks: each param * sum across all tasks
-            task_sum = torch.sum(all_checks, dim=0, keepdim=True)  # [1, n_params]
-            cross_pcb = all_checks * task_sum  # [n_models, n_params]
-            # Apply tanh activation
+            cross_pcb = all_checks * torch.sum(all_checks, dim=0)
             cross_pcb_act = torch.tanh(cross_pcb)
 
         # Step 4: Combined competition score
@@ -145,24 +145,19 @@ class PCBMergingAlgorithm(SimpleProfilerMixin, BaseAlgorithm):
 
         # Step 5: Drop and rescale mechanism
         with self.profile("drop and rescale"):
-            # Drop top pcb_ratio% of highest competition parameters
-            scale = clamp_by_percentile(task_pcb, 1 - self.pcb_ratio, 0.0)
-            # Normalize scaling factors
-            scale = normalize(scale, dim=1)
+            scale = normalize(clamp(task_pcb, 1 - self.pcb_ratio, 0), dim=1)
 
         # Step 6: Weighted merging
         with self.profile("weighted merging"):
-            # Weighted sum of task vectors
-            numerator = torch.sum(all_checks * scale, dim=0)
-            denominator = torch.clamp(torch.sum(scale, dim=0), min=1e-12)
-            merged_tv = numerator / denominator
+            tvs = clamped_all_checks
+            merged_tv = torch.sum(tvs * scale, dim=0) / torch.clamp(torch.sum(scale, dim=0), min=1e-12)
 
         # Update statistics
-        self.stats['total_parameters'] = n_params
-        dropped_count = ((scale == 0).sum(dim=1).float().mean() * n_params).item()
+        self.stats['total_parameters'] = d
+        dropped_count = ((scale == 0).sum().float() / scale.numel()).item() * d
         self.stats['dropped_parameters'] = int(dropped_count)
 
-        log.info(f"PCB merging completed. Dropped ~{dropped_count:.0f} parameters ({dropped_count/n_params*100:.1f}%)")
+        log.info(f"PCB merging completed. Effective parameter usage: {100-dropped_count/d*100:.1f}%")
 
         return merged_tv
 
