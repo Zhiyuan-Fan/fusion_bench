@@ -82,6 +82,9 @@ _import_structure = {
     "tall_mask": ["TallMaskTaskArithmeticAlgorithm"],
     "model_stock": ["ModelStock"],
     "wudi": ["wudi_merging", "WUDIMerging"],
+    "universal_merger": ["UniversalMergerAlgorithm"],
+    "universal_merger_v2": ["UniversalMergerV2Algorithm"],
+    "pcb_merging": ["PCBMergingAlgorithm"],
     # plug-and-play model merging methods
     "concrete_subspace": [
         "ConcreteTaskArithmeticAlgorithmForCLIP",
@@ -258,6 +261,9 @@ if TYPE_CHECKING:
     )
     from .weighted_average import WeightedAverageAlgorithm, WeightedAverageForLLama
     from .wudi import WUDIMerging, wudi_merging
+    from .universal_merger import UniversalMergerAlgorithm
+    from .universal_merger_v2 import UniversalMergerV2Algorithm
+    from .pcb_merging import PCBMergingAlgorithm
 
 else:
     sys.modules[__name__] = LazyImporter(
